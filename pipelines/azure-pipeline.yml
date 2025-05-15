@@ -1,0 +1,54 @@
+trigger:
+  branches: [ main ]
+
+name: GitOps_$(Date:yyyyMMdd)$(Rev:.r)   # optional build numbering
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  k8sOverlayPath: 'k8s/overlays/dev'     # validate the dev overlay
+  kustomizeVersion: '5.4.1'
+  kubevalVersion: '0.16.2'
+
+stages:
+# ───────────────────────────────────────────────────────────────
+- stage: Validate
+  displayName: 'Static Validation'
+  jobs:
+  - job: Lint
+    displayName: 'Lint & Schema-check k8s manifests'
+    steps:
+    # 1) Checkout repo
+    - checkout: self
+
+    # 2) Install kustomize
+    - bash: |
+        curl -sL https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh | \
+          KUSTOMIZE_VERSION=${{ variables.kustomizeVersion }} bash
+        echo "##vso[task.prependpath]$HOME/kustomize"
+      displayName: 'Install kustomize'
+
+    # 3) Install kubeval
+    - bash: |
+        curl -Lo kubeval.tar.gz https://github.com/instrumenta/kubeval/releases/download/${{ variables.kubevalVersion }}/kubeval-linux-amd64.tar.gz
+        tar -xzf kubeval.tar.gz kubeval
+        chmod +x kubeval
+        echo "##vso[task.prependpath]$PWD"
+      displayName: 'Install kubeval'
+
+    # 4) Build overlay and validate
+    - bash: |
+        echo "Validating overlay: ${{ variables.k8sOverlayPath }}"
+        kustomize build ${{ variables.k8sOverlayPath }} | kubeval --strict --ignore-missing-schemas
+      displayName: 'kustomize build & kubeval'
+
+    # 5) Optional - run yamllint (uncomment if desired)
+    # - script: |
+    #     pip install yamllint
+    #     yamllint k8s/
+    #   displayName: 'YAML lint'
+
+# ───
+# No deploy steps here: Flux picks up changes after merge/push
+# ───────────────────────────────────────────────────────────────

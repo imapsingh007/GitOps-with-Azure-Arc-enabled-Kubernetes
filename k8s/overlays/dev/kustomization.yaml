@@ -1,0 +1,27 @@
+apiVersion: kustomize.config.k8s.io/v1
+kind: Kustomization
+
+# ➊ Track the base
+resources:
+  - ../../base
+
+# ➋ Environment-specific tweaks
+nameSuffix: -dev
+commonLabels:
+  env: dev
+
+# ➌ Pin a lightweight image tag & scale down replicas
+images:
+  - name: nginx
+    newTag: 1.27-alpine
+
+patchesJson6902:
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: nginx
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 1
